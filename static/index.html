@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>实时消息展示</title>
+  <style>
+    :root {
+      --bg: #f3efe7;
+      --panel: rgba(255, 252, 246, 0.92);
+      --line: #d9ccb5;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #c26a2e;
+      --accent-dark: #8f4b20;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(194, 106, 46, 0.18), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(31, 41, 55, 0.12), transparent 28%),
+        linear-gradient(135deg, #f6f1e8, #efe4d3 55%, #eadbc5);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .panel {
+      width: min(760px, 100%);
+      background: var(--panel);
+      border: 1px solid rgba(217, 204, 181, 0.85);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 22px 60px rgba(68, 46, 24, 0.12);
+      backdrop-filter: blur(16px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 5vw, 44px);
+      line-height: 1.05;
+    }
+
+    .subtext {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #eab308;
+      transition: background 0.2s ease;
+    }
+
+    .dot.connected {
+      background: #16a34a;
+    }
+
+    .latest {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(252,245,234,0.95));
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .message {
+      margin: 14px 0 10px;
+      min-height: 72px;
+      font-size: clamp(24px, 4vw, 34px);
+      font-weight: 700;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .composer {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 16px;
+      background: rgba(255,255,255,0.88);
+      color: var(--text);
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 0 22px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 640px) {
+      .panel {
+        padding: 20px;
+      }
+
+      .composer {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        height: 48px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>实时消息展示</h1>
+    <p class="subtext">页面通过 SSE 持续接收服务端推送，并始终显示最新收到的一条消息。</p>
+
+    <div class="status">
+      <span id="status-dot" class="dot"></span>
+      <span id="status-text">正在连接</span>
+    </div>
+
+    <section class="latest">
+      <div class="label">最新消息</div>
+      <div id="latest-message" class="message">等待消息...</div>
+      <div id="latest-meta" class="meta">尚未接收到任何内容</div>
+    </section>
+
+    <div class="composer">
+      <input id="message-input" type="text" placeholder="输入一条消息，点击发送测试" maxlength="500">
+      <button id="send-button" type="button">发送</button>
+    </div>
+  </main>
+
+  <script>
+    const statusDot = document.getElementById("status-dot");
+    const statusText = document.getElementById("status-text");
+    const latestMessage = document.getElementById("latest-message");
+    const latestMeta = document.getElementById("latest-meta");
+    const input = document.getElementById("message-input");
+    const sendButton = document.getElementById("send-button");
+
+    const eventSource = new EventSource("/events");
+
+    function setConnected(connected) {
+      statusDot.classList.toggle("connected", connected);
+      statusText.textContent = connected ? "SSE 已连接" : "SSE 连接断开";
+    }
+
+    eventSource.addEventListener("open", () => {
+      setConnected(true);
+    });
+
+    eventSource.addEventListener("error", () => {
+      setConnected(false);
+    });
+
+    eventSource.addEventListener("message", (event) => {
+      const data = JSON.parse(event.data);
+      latestMessage.textContent = data.message || "空消息";
+      latestMeta.textContent = `来源：${data.client || "unknown"} · 时间：${new Date().toLocaleTimeString()}`;
+    });
+
+    async function sendMessage() {
+      const value = input.value.trim();
+      if (!value) {
+        return;
+      }
+
+      sendButton.disabled = true;
+
+      try {
+        const response = await fetch("/publish", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ message: value })
+        });
+
+        if (!response.ok) {
+          throw new Error("publish failed");
+        }
+
+        input.value = "";
+        input.focus();
+      } catch (error) {
+        latestMeta.textContent = "发送失败，请检查服务是否正常";
+      } finally {
+        sendButton.disabled = false;
+      }
+    }
+
+    sendButton.addEventListener("click", sendMessage);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        sendMessage();
+      }
+    });
+
+    setConnected(false);
+  </script>
+</body>
+</html>
