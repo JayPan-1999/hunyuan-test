@@ -41,6 +41,11 @@ async def index() -> FileResponse:
     return FileResponse(BASE_DIR / "static" / "index.html")
 
 
+@app.get("/health")
+async def health() -> JSONResponse:
+    return JSONResponse({"status": "ok"})
+
+
 @app.get("/events")
 async def event_stream(request: Request) -> StreamingResponse:
     subscriber = broker.subscribe()

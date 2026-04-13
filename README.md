@@ -49,3 +49,42 @@ curl --location 'http://127.0.0.1:8000/publish' \
 ```
 
 页面订阅的是 SSE，所以浏览器会自动收到新消息并同步显示。
+
+## Azure App Service 配置
+
+如果代码已经成功部署，但主页打不开、`/publish` 调不通，通常不是代码上传失败，而是 App Service 上的 Python 进程没有按 FastAPI 方式启动。
+
+推荐配置如下：
+
+- Runtime: Python 3.12
+- OS: Linux
+- Startup Command:
+
+```bash
+gunicorn -k uvicorn.workers.UvicornWorker --bind=0.0.0.0:8000 main:app
+```
+
+- General settings:
+	- HTTPS Only: On
+	- Always On: On
+	- WebSockets: Off
+
+- App settings:
+
+```text
+SCM_DO_BUILD_DURING_DEPLOYMENT=true
+```
+
+部署完成后，建议先验证：
+
+```text
+https://<your-app-name>.azurewebsites.net/health
+```
+
+如果 `/health` 都打不开，优先检查：
+
+- Startup Command 是否已配置
+- GitHub Actions 部署日志里是否有依赖安装错误
+- App Service 的 Log stream 里是否有 `ModuleNotFoundError` 或启动命令报错
+
+> 当前项目使用内存内消息广播，部署到 App Service 时建议先保持单实例。多实例下，`/publish` 和 `/events` 可能会落到不同实例，消息不会自动同步。
