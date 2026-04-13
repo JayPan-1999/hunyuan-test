@@ -65,9 +65,9 @@ gunicorn -k uvicorn.workers.UvicornWorker --bind=0.0.0.0:8000 main:app
 ```
 
 - General settings:
-	- HTTPS Only: On
-	- Always On: On
-	- WebSockets: Off
+    - HTTPS Only: On
+    - Always On: On
+    - WebSockets: Off
 
 - App settings:
 
